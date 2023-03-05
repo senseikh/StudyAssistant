@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     
     'rest_framework',
     'corsheaders',
+    'widget_tweaks',
 ]
 
 AUTH_USER_MODEL = 'base.User'
@@ -144,3 +145,10 @@ MEDIA_ROOT= BASE_DIR / 'static/images'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOW_ALL_ORIGINS = True
+
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_HOST_USER = 'hillarykisera@gmail.com'
+EMAIL_HOST_PASSWORD = 'gijzpizwmznjikko'
+EMAIL_USE_TLS = True
+DEFAULT_FROM_EMAIL = 'hillarykisera@gmail.com'

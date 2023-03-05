@@ -6,6 +6,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from .models import Room, Topic, Message,User
 from .forms import RoomForm,UserForm,MyuserCreationForm
+import re
 
 # Create your views here.
 
@@ -52,16 +53,25 @@ def registerUser(request):
     form = MyuserCreationForm()
 
     if request.method == 'POST':
-        form = MyuserCreationForm(request.POST)
+        form = MyuserCreationForm(request.POST)    
         if form.is_valid():
+            username = form.cleaned_data.get('username')
+            password1 = form.cleaned_data.get('password1')
+            password2 = form.cleaned_data.get('password2')
+            if not re.match(r'^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z\d]{8,}$', password1):
+                messages.error(request, 'Password must contain both letters and numbers, and be at least 8 characters long')
+                return redirect('register')
+            if password1 != password2:
+                messages.error(request, 'Passwords do not match')
             user = form.save(commit=False)
-            user.username = user.username.lower()
+            user.username = user.username.lower()  
             user.save()
             login(request, user)
             return redirect('home')
         else:
             messages.error(request, 'An error occured during registration!')
-
+            
+    
     context = {'form':form}
     return render(request, 'base/login_register.html', context)
 
