@@ -5,43 +5,152 @@ from django.http import HttpResponse
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from .models import Room, Topic, Message,User
-from .forms import RoomForm,UserForm,MyuserCreationForm
+from .forms import RoomForm,UserForm,RegistrationForm,LogInForm
+from django.contrib.auth.forms import PasswordChangeForm
 import re
+# from django.contrib.auth.forms import PasswordChangeFor
+from .utils import get_user_from_email_verification_token, send_email_verification
 
 # Create your views here.
 
 # rooms = [
-#   {"id": 1,"name": "Mustang learninh"},
-#   {"id": 2,"name": "toyota learning"},
-#   {"id": 3,"name": "benz learning"}
+#   {"id": 1,"name": "Mustang learning"},
+#   {"id": 2,"name": "toyotaz learning"},
+#   {"id": 3,"name": "benzzzz learning"}
 # ]
 
-def loginPage(request):
+#USER REGISTRATION
+def register(request):
+    #if request is a get request return user registration form
+    if request.method=="GET":
+        form=RegistrationForm()
+        return render(request,'base/login_register.html',{'form':form})
+
+    #if request is a post request create user
+    elif request.method=="POST":
+        filled_form=RegistrationForm(request.POST)
+        #check if form is valid
+        if filled_form.is_valid():
+
+            first_name=filled_form.cleaned_data['first_name']
+            # last_name=filled_form.cleaned_data['last_name']
+            username=filled_form.cleaned_data['username']
+            email=filled_form.cleaned_data['email']
+            password=filled_form.cleaned_data['password']
+             
+            #create new user
+            new_user = User.objects.create(
+                first_name=first_name,
+                # last_name=last_name,
+                username=username,
+                email=email,
+                password=password,
+                is_active = False
+                )
+            
+            if send_email_verification(request=request, user = new_user):
+                return redirect('login')
+            else:
+                new_user.delete()
+                return redirect('register')
+
+        #if form is invalid
+        else:
+            form=filled_form
+            context={
+                'form':form
+                }
+            return render(request,'base/login_register.html',context)
+
+def verify_email_address(request, uidb64, token):
+    user = get_user_from_email_verification_token(uidb64, token)
+    if user != None:
+        user.is_active = True
+        user.save()
+        login(request, user)
+        
+    return redirect('home')
+
+def log_in(request):
     page = 'login'
-    if request.user.is_authenticated:
-        return redirect('home')
-    
-    if request.method == 'POST':
-        email = request.POST.get('email').lower()
-        password = request.POST.get('password')
-
-        try:
-            user = User.objects.get(email=email)
-            print(user)
-        except:
-            messages.error(request, 'User not available!')
-
-        user = authenticate(request, email=email, password=password)
-        # print(user)
-
-        if user is not None:   
-            login(request,user)
+    if request.method=="GET":
+        #if request is GET check if user is already logged in
+        if request.user.is_authenticated:
+            #if logged in redirect
             return redirect('home')
         else:
-            messages.error(request, 'Username or Password does not exist!')
+            #if not logged in return login form
+            form=LogInForm()
+            context ={
+                'form':form, 
+                'page':page
+                }
+            return render(request,'base/login_register.html',context)
 
-    context = {'page':page}
-    return render(request, 'base/login_register.html', context)
+    
+    elif request.method =="POST":
+        #if request is a POST log in user
+        page = 'login'
+        filled_form = LogInForm(request.POST)
+        if filled_form.is_valid():
+
+            username=filled_form.cleaned_data.get('username_or_email')
+            print(username)
+            password=filled_form.cleaned_data.get('password')
+            print(password)
+            
+            #check if username and password are correct
+            user = authenticate(request, username=username, password=password)
+            if user != None:
+                #if a user is returned authentication was successful
+                #log in the user
+
+                login(request, user)
+                try:
+                    next = request.GET.get('next')
+                except:
+                    next = None
+                if next is None:
+                    return redirect('home')
+                else:
+                    return redirect(next)
+            else:
+                #if no user is returned authentication failed
+                #add error
+                filled_form.add_error(field=None,error='Incorrect username/email or password!')
+                form=filled_form
+                context = { 'form':form, 'page':page}
+                return render(request,'base/login_register.html',{'form':form})
+        else:
+            form=filled_form
+            return render(request,'base/login_register.html',{'form':form})
+
+# def loginPage(request):
+#     page = 'login'
+#     if request.user.is_authenticated:
+#         return redirect('home')
+    
+#     if request.method == 'POST':
+#         email = request.POST.get('email').lower()
+#         password = request.POST.get('password')
+
+#         try:
+#             user = User.objects.get(email=email)
+#             print(user)
+#         except:
+#             messages.error(request, 'User not available!')
+
+#         user = authenticate(request, email=email, password=password)
+#         # print(user)
+
+#         if user is not None:   
+#             login(request,user)
+#             return redirect('home')
+#         else:
+#             messages.error(request, 'Username or Password does not exist!')
+
+#     context = {'page':page}
+#     return render(request, 'base/login_register.html', context)
 
 
 def logoutUser(request):
@@ -49,33 +158,62 @@ def logoutUser(request):
     return redirect('home')
 
 
-def registerUser(request):
-    form = MyuserCreationForm()
+# def registerUser(request):
+#     form = MyuserCreationForm()
 
-    if request.method == 'POST':
-        form = MyuserCreationForm(request.POST)    
-        if form.is_valid():
-            username = form.cleaned_data.get('username')
-            password1 = form.cleaned_data.get('password1')
-            password2 = form.cleaned_data.get('password2')
-            if not re.match(r'^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z\d]{8,}$', password1):
-                messages.error(request, 'Password must contain both letters and numbers, and be at least 8 characters long')
-                return redirect('register')
-            if password1 != password2:
-                messages.error(request, 'Passwords do not match')
-            user = form.save(commit=False)
-            user.username = user.username.lower()  
-            user.save()
-            login(request, user)
-            return redirect('home')
-        else:
-            messages.error(request, 'An error occured during registration!')
+#     if request.method == 'POST':
+#         form = MyuserCreationForm(request.POST)    
+#         if form.is_valid():
+#             username = form.cleaned_data.get('username')
+#             password1 = form.cleaned_data.get('password1')
+#             password2 = form.cleaned_data.get('password2')
+#             if not re.match(r'^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z\d]{8,}$', password1):
+#                 messages.error(request, 'Password must contain both letters and numbers, and be at least 8 characters long')
+#                 return redirect('register')
+#             if password1 != password2:
+#                 messages.error(request, 'Passwords do not match')
+#             user = form.save(commit=False)
+#             user.username = user.username.lower()  
+#             user.save()
+#             login(request, user)
+#             return redirect('home')
+#         else:
+#             messages.error(request, 'An error occured during registration!')
             
     
-    context = {'form':form}
-    return render(request, 'base/login_register.html', context)
+#     context = {'form':form}
+#     return render(request, 'base/login_register.html', context)
 
 
+# def verify_email_address(request, uidb64, token):
+#     user = get_user_from_email_verification_token(uidb64, token)
+#     if user != None:
+#         user.is_active = True
+#         user.save()
+#         login(request, user)
+        
+#     return redirect('loginPage')
+
+
+
+@login_required(login_url='base/login/')
+def password_change(request):
+    current_user = User.objects.get(username=request.user.username)
+
+    if request.method=="POST":
+        filled_form=PasswordChangeForm(current_user,request.POST)
+
+        if filled_form.is_valid():
+            filled_form.save()
+            return redirect('home')
+        else:
+            context = {'form':filled_form}
+            return render(request,'base/changepassword.html',context)
+        
+    else:
+        form=PasswordChangeForm(user=current_user)
+        context = {'form':form}
+        return render(request,'base/changepassword.html',context)
 
 def home(request):
     q = request.GET.get('q') if request.GET.get('q') != None else ''
